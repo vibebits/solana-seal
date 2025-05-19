@@ -1,83 +1,92 @@
-// Copyright (c), Mysten Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
 use crate::errors::InternalError;
 use crate::metrics::Metrics;
 use crate::MyState;
 use crate::Server;
-use crate::solana::handlers::handle_fetch_key_solana;
-use crate::solana::types::{SolanaCertificate, FetchKeySolanaRequest, FetchKeySolanaResponse};
+use crate::solana::handler::handle_fetch_key;
+use crate::solana::types::{Certificate, FetchKeyRequest};
 use crate::types::{ElGamalPublicKey, ElgamalVerificationKey, Network, IbeMasterKey};
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::Json;
 use crypto::elgamal;
-use fastcrypto::ed25519::{Ed25519PublicKey, Ed25519Signature, Ed25519PrivateKey, Ed25519KeyPair};
-use fastcrypto::traits::{KeyPair, ToFromBytes, SigningKey, VerifyingKey, Signer};
+use fastcrypto::ed25519::{Ed25519PublicKey, Ed25519Signature, Ed25519KeyPair};
+use fastcrypto::traits::{KeyPair, VerifyingKey, Signer};
+use fastcrypto::encoding::{Base64, Encoding};
 use prometheus::Registry;
 use rand::thread_rng;
 use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signature, Signer as SolanaSigner};
-use solana_sdk::system_instruction;
+use solana_sdk::signature::{Keypair, Signer as SolanaSigner};
 use solana_sdk::transaction::Transaction;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::watch::channel;
-use bs58;
 use chrono;
 use hex;
+use mockall::predicate;
+use mockall::mock;
+use serde_json::json;
+use bincode;
 
-// Define constants for tests that match the ones in handlers.rs
+use crate::solana::constants::{SOLANA_RPC_ENDPOINT, SEAL_APPROVE_DISCRIMINATOR};
 static SOLANA_PROGRAM_ID: Pubkey = Pubkey::new_from_array([1; 32]);
-const SOLANA_APPROVE_INSTRUCTION_DATA_PREFIX: &[u8] = &[0]; // Instruction index for seal_approve
+const PROGRAM_RETURN_OK: &str = "AgAAAG9r"; // base64 encoded "ok"
+
+// Mock the ureq module
+mock! {
+    pub UreqClient {
+        fn post(&self, url: &str) -> Self;
+        fn set(&self, header: &str, value: &str) -> Self;
+        fn send_json(&self, body: serde_json::Value) -> Result<MockResponse, ureq::Error>;
+    }
+}
+
+mock! {
+    pub Response {
+        fn into_string(&self) -> Result<String, std::io::Error>;
+    }
+}
 
 // Helper function to create a test transaction
 fn create_test_transaction(keypair: &Keypair) -> (Transaction, String) {
     let pubkey = keypair.pubkey();
     
-    // Create a simple transfer instruction
-    let system_instruction = system_instruction::transfer(
-        &pubkey,
-        &Pubkey::new_unique(),
-        100,
-    );
-    
-    // For testing, create a random program ID instead of trying to parse the real one
-    // This avoids the parsing error and is sufficient for tests since the mock policy check
-    // will be used in test mode
-    let seal_program_id = SOLANA_PROGRAM_ID;
-    println!("Using test program ID: {}", seal_program_id);
-    
-    // Mark one of the instructions as a Seal program instruction to satisfy the policy check
+    // Create a Seal program instruction with proper format
     let accounts = vec![
         solana_sdk::instruction::AccountMeta::new(pubkey, true),
         solana_sdk::instruction::AccountMeta::new(Pubkey::new_unique(), false)
     ];
     
-    // Create instruction data with the approval prefix
+    // Create instruction data with proper format:
+    // - 8 bytes: discriminator
+    // - 4 bytes: length of the vector (u32 LE)
+    // - N bytes: content of the vector
     let mut instruction_data = Vec::new();
-    instruction_data.extend_from_slice(SOLANA_APPROVE_INSTRUCTION_DATA_PREFIX);
-    instruction_data.extend_from_slice(b"test_data");
+    instruction_data.extend_from_slice(SEAL_APPROVE_DISCRIMINATOR);
+    
+    // Add length (4 bytes) and content
+    let test_data = b"00112233";
+    instruction_data.extend_from_slice(&(test_data.len() as u32).to_le_bytes());
+    instruction_data.extend_from_slice(test_data);
     
     let seal_instruction = solana_sdk::instruction::Instruction {
-        program_id: seal_program_id,
+        program_id: SOLANA_PROGRAM_ID,
         accounts,
         data: instruction_data,
     };
     
-    // Create and sign a transaction with both instructions
+    // Create and sign a transaction with the seal instruction
     let recent_blockhash = Hash::new_unique();
     let transaction = Transaction::new_signed_with_payer(
-        &[system_instruction.clone(), seal_instruction],
+        &[seal_instruction],
         Some(&pubkey),
         &[keypair],
         recent_blockhash,
     );
     
     // Serialize and encode the transaction
-    let serialized = bincode::serialize(&transaction).unwrap();
-    let encoded = bs58::encode(serialized).into_string();
+    let serialized = bincode::serialize(&transaction).expect("Failed to serialize transaction");
+    let encoded = Base64::encode(serialized);
     
     (transaction, encoded)
 }
@@ -102,7 +111,7 @@ fn create_certificate(
     creation_time: u64,
     ttl_min: u16,
     keypair: &Keypair,
-) -> SolanaCertificate {
+) -> Certificate {
     // Format the message exactly as expected in handlers.rs check_certificate_signature_solana function
     let message = format!(
         "Accessing keys of package {} for {} mins from {}, session key {}",
@@ -120,7 +129,7 @@ fn create_certificate(
     let signature = keypair.sign_message(message.as_bytes());
     
     // Create certificate with the signature
-    SolanaCertificate {
+    Certificate {
         user,
         session_vk,
         creation_time,
@@ -149,6 +158,20 @@ fn signed_request_solana(
     };
     
     bcs::to_bytes(&req).expect("should serialize")
+}
+
+// Helper function to create a mock simulation response
+fn create_mock_simulation_response() -> serde_json::Value {
+    json!({
+        "result": {
+            "value": {
+                "err": null,
+                "logs": [
+                    format!("Program return: {} {}", SOLANA_PROGRAM_ID, PROGRAM_RETURN_OK)
+                ]
+            }
+        }
+    })
 }
 
 #[tokio::test]
@@ -212,10 +235,8 @@ async fn test_handle_fetch_key_solana() {
     // Create ElGamal keys for encryption
     let (enc_key, enc_vk) = create_test_elgamal_keys(&server.master_key);
     
-    // Create the request signature using Ed25519
-    let transaction_bytes = bs58::decode(&encoded_tx).into_vec().expect("Should decode base58");
-    
     // Create request data using the same method as in handlers.rs
+    let transaction_bytes = Base64::decode(&encoded_tx).expect("Should decode base64");
     let request_data = signed_request_solana(&transaction_bytes, &enc_key, &enc_vk);
     
     println!("Request data length: {}", request_data.len());
@@ -228,7 +249,7 @@ async fn test_handle_fetch_key_solana() {
     println!("Local verification result: {:?}", verify_result);
     
     // Create request
-    let request = FetchKeySolanaRequest {
+    let request = FetchKeyRequest {
         ptb: encoded_tx,
         enc_key,
         enc_verification_key: enc_vk,
@@ -240,8 +261,37 @@ async fn test_handle_fetch_key_solana() {
     let mut headers = HeaderMap::new();
     headers.insert("x-request-id", "test-request-id".parse().unwrap());
     
+    // Mock the ureq client
+    let mut mock_client = MockUreqClient::new();
+    
+    mock_client
+        .expect_post()
+        .with(predicate::function(|url: &str| url == SOLANA_RPC_ENDPOINT))
+        .returning(move |_| {
+            let mut client = MockUreqClient::new();
+            client
+                .expect_set()
+                .returning(move |_, _| {
+                    let mut client = MockUreqClient::new();
+                    client
+                        .expect_send_json()
+                        .returning(move |_| {
+                            let mut response = MockResponse::new();
+                            response
+                                .expect_into_string()
+                                .returning(move || Ok(format!(
+                                    r#"{{"result":{{"value":{{"err":null,"logs":["Program return: {} {}"]}}}}}}"#,
+                                    SOLANA_PROGRAM_ID, PROGRAM_RETURN_OK
+                                )));
+                            Ok(response)
+                        });
+                    client
+                });
+            client
+        });
+    
     // Call the handler
-    let result = handle_fetch_key_solana(
+    let result = handle_fetch_key(
         State(app_state),
         headers,
         Json(request),
@@ -328,14 +378,14 @@ async fn test_handle_fetch_key_solana_invalid_signature() {
     let (enc_key, enc_vk) = create_test_elgamal_keys(&server.master_key);
     
     // Create request data using the same method as in handlers.rs
-    let transaction_bytes = bs58::decode(&encoded_tx).into_vec().expect("Should decode base58");
+    let transaction_bytes = Base64::decode(&encoded_tx).expect("Should decode base64");
     let request_data = signed_request_solana(&transaction_bytes, &enc_key, &enc_vk);
     
     // Create an invalid request signature (using wrong_session_kp)
     let request_signature: Ed25519Signature = wrong_session_kp.sign(&request_data);
     
     // Create request
-    let request = FetchKeySolanaRequest {
+    let request = FetchKeyRequest {
         ptb: encoded_tx,
         enc_key,
         enc_verification_key: enc_vk,
@@ -348,7 +398,7 @@ async fn test_handle_fetch_key_solana_invalid_signature() {
     headers.insert("x-request-id", "test-request-id".parse().unwrap());
     
     // Call the handler
-    let result = handle_fetch_key_solana(
+    let result = handle_fetch_key(
         State(app_state),
         headers,
         Json(request),
@@ -424,14 +474,14 @@ async fn test_handle_fetch_key_solana_expired_certificate() {
     let (enc_key, enc_vk) = create_test_elgamal_keys(&server.master_key);
     
     // Create request data using the same method as in handlers.rs
-    let transaction_bytes = bs58::decode(&encoded_tx).into_vec().expect("Should decode base58");
+    let transaction_bytes = Base64::decode(&encoded_tx).expect("Should decode base64");
     let request_data = signed_request_solana(&transaction_bytes, &enc_key, &enc_vk);
     
     // Create the request signature
     let request_signature: Ed25519Signature = session_kp.sign(&request_data);
     
     // Create request
-    let request = FetchKeySolanaRequest {
+    let request = FetchKeyRequest {
         ptb: encoded_tx,
         enc_key,
         enc_verification_key: enc_vk,
@@ -444,7 +494,7 @@ async fn test_handle_fetch_key_solana_expired_certificate() {
     headers.insert("x-request-id", "test-request-id".parse().unwrap());
     
     // Call the handler
-    let result = handle_fetch_key_solana(
+    let result = handle_fetch_key(
         State(app_state),
         headers,
         Json(request),
