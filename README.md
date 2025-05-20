@@ -1,6 +1,21 @@
 # solana-seal
 Unleash the power of Walrus.xyz and Seal on Solana. Now the decentralized storage is programmable natively with Solana programs.
 
+## Demos
+- **Starter**
+https://solana-seal-dapp.vercel.app/starter
+
+interacts with [HMyQGJVyXw5MvpHbKQ8noKXcbtX9TyPkwM8TcyHSFdTJ](https://explorer.solana.com/address/HMyQGJVyXw5MvpHbKQ8noKXcbtX9TyPkwM8TcyHSFdTJ?cluster=devnet)
+
+- **Whitelist**
+https://solana-seal-dapp.vercel.app/whitelist
+
+interacts with [5E7FfNPZjzbxLJCTz64oTsk1ZpKZKDsqAiG5H3igxe9x](https://explorer.solana.com/address/5E7FfNPZjzbxLJCTz64oTsk1ZpKZKDsqAiG5H3igxe9x?cluster=devnet)
+
+- **Key servers**
+ - [solana-seal-key-server-1](https://solana-seal-key-server-1.up.railway.app) of object id: [0xc99e3323d679ab4d26de2c984cda693698c453c9ae12baaf218c7ea3518428b0](https://suiscan.xyz/testnet/object/0xc99e3323d679ab4d26de2c984cda693698c453c9ae12baaf218c7ea3518428b0/tx-blocks)
+  - [solana-seal-key-server-2](https://solana-seal-key-server-2.up.railway.app) of object id: [0xa6a2f5713b84cfc0572b29d9b3edf4fa9d88915e821f6ac10c77fcf84d57181f](https://suiscan.xyz/testnet/object/0xa6a2f5713b84cfc0572b29d9b3edf4fa9d88915e821f6ac10c77fcf84d57181f/tx-blocks)
+
 ## Overview
 Solana Seal is an ingenious project that bridges the gap between Solana and Walrus' decentralized storage solution. It enables Solana programs and wallets to interact seamlessly with Walrus.xyz (decentralized storage) and Seal (decentralized secrets management), making decentralized storage programmable within the Solana ecosystem.
 
