@@ -15,7 +15,7 @@ fn check_id_prefix(id: &[u8], prefix: &[u8]) -> bool {
 pub mod solana_seal_whitelist {
     use super::*;
 
-    // seal_approve will accept address as uint8array
+    // seal_approve will accept id as uint8array
     // it will get user from the context
     // user has proxy signed with sessionKey for the program
     // it will return ok if user is in the whitelist
@@ -32,7 +32,7 @@ pub mod solana_seal_whitelist {
 
         // Check if the ID has the right prefix
         if !check_id_prefix(&id, address_list.key().as_ref()) {
-            return Ok("not_ok".to_string())
+            return Ok("not_ok".to_string());
         }
 
         if address_list.addresses.contains(&user.key()) {
@@ -160,6 +160,10 @@ pub struct VerifyWhitelist<'info> {
 
 #[derive(Accounts)]
 pub struct SealApprove<'info> {
+    /// CHECK: This is the user account whose public key will be checked against the whitelist.
+    /// It is not mutated and not required to be a signer for this instruction.
+    /// this is also checked by key server against certificate, in case if user account is using in program logic
+    pub user: AccountInfo<'info>,
     #[account(
         seeds = [b"whitelist", whitelist.authority.as_ref()],
         bump = whitelist.bump
@@ -170,9 +174,6 @@ pub struct SealApprove<'info> {
         bump
     )]
     pub address_list: Account<'info, AddressList>,
-    /// CHECK: This is the user account whose public key will be checked against the whitelist.
-    /// It is not mutated and not required to be a signer for this instruction.
-    pub user: AccountInfo<'info>,
 }
 
 #[account]

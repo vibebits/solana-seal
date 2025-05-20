@@ -10,11 +10,16 @@ solana_seal_whitelist = "5E7FfNPZjzbxLJCTz64oTsk1ZpKZKDsqAiG5H3igxe9x"
 solana_seal_account_based = "8G4ruxnreCskTDTHN43PtKsU7oBzW3ReZEpLcsfeHDmp"
 solana_seal_starter = "HMyQGJVyXw5MvpHbKQ8noKXcbtX9TyPkwM8TcyHSFdTJ"
 
+[programs.devnet]
+solana_seal_whitelist = "5E7FfNPZjzbxLJCTz64oTsk1ZpKZKDsqAiG5H3igxe9x"
+solana_seal_account_based = "8G4ruxnreCskTDTHN43PtKsU7oBzW3ReZEpLcsfeHDmp"
+solana_seal_starter = "HMyQGJVyXw5MvpHbKQ8noKXcbtX9TyPkwM8TcyHSFdTJ"
+
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
