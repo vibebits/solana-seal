@@ -92,4 +92,4 @@ export const useSolanaSessionKey = (programId: string) => {
   };
 };
 
-export default useSessionKey; 
+export default useSolanaSessionKey; 
