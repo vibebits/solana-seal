@@ -25,11 +25,7 @@ This is a Next.js frontend application that demonstrates how to interact with th
    ```
 
 3. Set up environment variables
-   Create a `.env.local` file with the following variables:
-   ```
-   NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-   ```
-   Adjust the URL to point to your Seal key server.
+   Copy `example.env` into `.env` enter the env variables.
 
 4. Run the development server
 ```bash
@@ -42,40 +38,32 @@ pnpm dev
 
 1. **Connect Wallet**: Click the "Connect Wallet" button to connect your Solana wallet.
 
-2. **Enter Key ID**: Enter a key ID that will be used in the Seal program instruction.
+2. **Create a session key**: Session key authorizes Seal key server to call `seal_approve` function a Solana Program for a period of time. So you won't need to sign for each request for a decryption key.
+
+2. **Enter Key ID**: Enter an encryption id that will be used in the Seal program instruction. (for starter example, id that starts with '123' will pass `seal_approve` check, so decryption will be successful)
 
 3. **Request Key**: Click the "Request Key" button to:
-   - Create a transaction with a `seal_approve` instruction
-   - Sign the transaction with your wallet
-   - Generate a certificate with your wallet's public key
-   - Sign the certificate with your wallet
-   - Send the request to the key server
-   - Receive encrypted decryption keys
+   - Create a transaction with one or more `seal_approve` instructions
+   - No need to sign as session key is used and the transaction is only simulated.
+   - Send the request to the key servers
+   - Servers check `seal_approve` of the Solana program
+   - If the function return `true`, servers return decryption keys
 
-4. **View Results**: The response from the key server will be displayed, showing the encrypted decryption keys.
+4. **View Results**: If threshold of keys are received, then decryption can be made successfully.
 
 ## Integration Details
 
 The app demonstrates a complete flow for interacting with the Seal key server:
 
-1. **Frontend Form**: Collects user input for the key ID
+1. **Encryption**: Encrypt client-side with encryption id
 2. **Wallet Signing**: Uses Solana wallet adapters for transaction and message signing
 3. **API Request**: Formats and sends the request to the key server
-4. **Response Display**: Processes and displays the encrypted keys
+4. **Decryption**: Fetch keys and decrypt
 
 ## Customization
 
 You can modify the application to suit your specific needs:
 
-- Update the `PROGRAM_ID` in `src/hooks/useSealProgram.ts` to match your Solana program
-- Modify the key ID generation logic in the form
-- Implement actual ElGamal encryption/decryption (current implementation uses placeholders)
+- Update the `.env` for `STARTER_PROGRAM_ID` or `WHITELIST_PROGRAM_ID` with your own Solana Program ID to try out with your own `seal_approve` logic
+- Read more about **identity based encryption** (https://github.com/MystenLabs/seal/blob/main/Design.md) to develop your own access policy patterns
 
-## Next Steps
-
-For production use, you would need to:
-
-1. Implement proper ElGamal key generation and encryption
-2. Add error handling for network issues and validation failures
-3. Enhance the UI to display more information about the keys
-4. Implement decryption of the received keys

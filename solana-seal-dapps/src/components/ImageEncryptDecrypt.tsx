@@ -3,7 +3,8 @@ import { SessionKey } from "@/solana-seal-sdk/session-key-solana";
 import { SessionKey as SuiSessionKey } from "@/solana-seal-sdk/session-key";
 import { SealClient } from "@/solana-seal-sdk/client";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { createWhitelistTx } from "@/utils/whitelist.seal";
+import { createStarterSealTx } from "@/utils/starter.seal";
+import { getFullEncryptionId } from "@/utils/starter";
 import { EncryptedObject } from "@/solana-seal-sdk";
 import { SOLANA_RPC_URL } from "@/utils/constants";
 
@@ -16,7 +17,7 @@ export const ImageEncryptDecrypt = ({
   sessionKey,
   solanaSealClient,
 }: ImageEncryptDecryptProps) => {
-  const [encryptionId, setEncryptionId] = useState("image");
+  const [encryptionId, setEncryptionId] = useState("123-image");
   const [plaintext, setPlaintext] = useState("data:image/webp;base64,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");
   const [encryptedData, setEncryptedData] = useState<{
     ciphertext: string;
@@ -26,31 +27,6 @@ export const ImageEncryptDecrypt = ({
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-
-  const getFullEncryptionId = () => {
-    // this is the simplest one
-    // return Buffer.from(encryptionId).toString('hex');
-
-    // it is obtained from addressListPda
-    const whitelistIdBase58String: string =
-      "5w5SpuJhM7drtZNNBg9o7MoAJg8y85SMLPUTxTqMseMP"; // Example Base58 Pubkey string
-
-    // 1. Convert whitelistIdString (Base58 Pubkey) to Buffer
-    const whitelistIdPubkey = new PublicKey(whitelistIdBase58String);
-    const whitelistIdBytes: Buffer = whitelistIdPubkey.toBuffer(); // This is your 32-byte prefix
-
-    // 2. Convert encryptionId to Buffer (UTF-8 encoded)
-    const encryptionIdBytes: Buffer = Buffer.from(encryptionId, "utf8");
-
-    // 3. Concatenate the two Buffers
-    const combinedIdBytes: Buffer = Buffer.concat([
-      whitelistIdBytes,
-      encryptionIdBytes,
-    ]);
-
-    // for whitelist we need to add whitelist id as prefix
-    return combinedIdBytes.toString("hex");
-  };
 
   const handleEncrypt = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +42,7 @@ export const ImageEncryptDecrypt = ({
       const plaintextBytes = new TextEncoder().encode(plaintext);
 
       // Ensure the encryptionId is a valid hex string
-      const fullEncryptionId = getFullEncryptionId();
+      const fullEncryptionId = await getFullEncryptionId(encryptionId);
       console.log("Encryption path - ID details:", {
         original: encryptionId,
         hexEncoded: fullEncryptionId,
@@ -113,14 +89,14 @@ export const ImageEncryptDecrypt = ({
       const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
       // Create the seal_approve transaction
-      const fullEncryptionId = getFullEncryptionId();
+      const fullEncryptionId = await getFullEncryptionId(encryptionId);
       console.log("Encryption path - ID details:", {
         original: encryptionId,
         hexEncoded: fullEncryptionId,
         has0xPrefix: fullEncryptionId.startsWith("0x"),
         length: fullEncryptionId.length,
       });
-      const tx = await createWhitelistTx(
+      const tx = await createStarterSealTx(
         connection,
         new PublicKey(sessionKey.getAddress()),
         fullEncryptionId
@@ -221,7 +197,7 @@ export const ImageEncryptDecrypt = ({
         });
         setLocalError(err.message);
       } else {
-        setLocalError("Failed to decrypt data");
+        setLocalError("Failed to decrypt data. To decrypt successfully, the encryption ID should start with '123'.");
       }
     } finally {
       setIsDecrypting(false);
@@ -250,7 +226,7 @@ export const ImageEncryptDecrypt = ({
             required
           />
           <p className="text-xs text-gray-500 mt-1">
-            This should be a valid hexadecimal string (0-9, a-f)
+            This is a string. If it starts with <em>123</em>, you can get decryption key from the server.
           </p>
         </div>
 

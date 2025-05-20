@@ -7,10 +7,48 @@ import {
   SystemProgram,
 } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import { WHITELIST_PROGRAM_ID, FEEPAYER, AUTHORITY } from "@/utils/constants";
+import { WHITELIST_PROGRAM_ID, AUTHORITY_PUBLIC_KEY } from "@/utils/constants";
 
-export async function createWhitelist(connection: Connection): Promise<void> {
-  const authorityPublicKey = AUTHORITY.publicKey;
+export async function getFullEncryptionId(encryptionId: string) {
+  // this is the simplest one
+  // return Buffer.from(encryptionId).toString('hex');
+
+  const [whitelistPda] = await PublicKey.findProgramAddress(
+    [Buffer.from("whitelist"), AUTHORITY_PUBLIC_KEY.toBuffer()],
+    WHITELIST_PROGRAM_ID
+  );
+  console.log(`(AddToWhitelist) Whitelist PDA: ${whitelistPda.toBase58()}`);
+
+  const [addressListPda] = await PublicKey.findProgramAddress(
+    [Buffer.from("address_list"), whitelistPda.toBuffer()],
+    WHITELIST_PROGRAM_ID
+  );
+
+  // it is obtained from addressListPda
+  const whitelistIdBase58String: string = addressListPda.toBase58();
+  
+  // 1. Convert whitelistIdString (Base58 Pubkey) to Buffer
+  const whitelistIdPubkey = new PublicKey(whitelistIdBase58String);
+  const whitelistIdBytes: Buffer = whitelistIdPubkey.toBuffer(); // This is your 32-byte prefix
+
+  // 2. Convert encryptionId to Buffer (UTF-8 encoded)
+  const encryptionIdBytes: Buffer = Buffer.from(encryptionId, "utf8");
+
+  // 3. Concatenate the two Buffers
+  const combinedIdBytes: Buffer = Buffer.concat([
+    whitelistIdBytes,
+    encryptionIdBytes,
+  ]);
+
+  // for whitelist we need to add whitelist id as prefix
+  return combinedIdBytes.toString("hex");
+}
+
+export async function createWhitelist(
+  connection: Connection,
+  authorityKeypair: Keypair
+): Promise<string> {
+  const authorityPublicKey = authorityKeypair.publicKey;
 
   // === 1. Create Whitelist Instruction ===
   const [whitelistPda] = await PublicKey.findProgramAddress(
@@ -74,7 +112,7 @@ export async function createWhitelist(connection: Connection): Promise<void> {
     .add(addInstruction);
   const { blockhash } = await connection.getLatestBlockhash();
   transaction.recentBlockhash = blockhash;
-  transaction.feePayer = FEEPAYER.publicKey; // FEEPAYER pays transaction fees
+  transaction.feePayer = authorityKeypair.publicKey; // FEEPAYER pays transaction fees
 
   console.log(
     `(createWhitelist) Preparing transaction to create whitelist AND add initial address for authority ${authorityPublicKey.toBase58()}.`
@@ -83,10 +121,7 @@ export async function createWhitelist(connection: Connection): Promise<void> {
   try {
     // AUTHORITY must sign because it's marked as signer in instruction keys
     // FEEPAYER must sign because it's the feePayer for the transaction
-    const signers = [FEEPAYER];
-    if (FEEPAYER.publicKey.toBase58() !== AUTHORITY.publicKey.toBase58()) {
-      signers.push(AUTHORITY);
-    }
+    const signers = [authorityKeypair];
     const txHash = await connection.sendTransaction(transaction, signers, {
       skipPreflight: false,
     });
@@ -96,6 +131,8 @@ export async function createWhitelist(connection: Connection): Promise<void> {
     );
     await connection.confirmTransaction(txHash, "confirmed");
     console.log("(createWhitelist) Transaction confirmed.");
+
+    return txHash;
   } catch (e: unknown) {
     console.error("(createWhitelist) Error sending combined transaction:", e);
     if (
@@ -110,8 +147,7 @@ export async function createWhitelist(connection: Connection): Promise<void> {
       } else {
         try {
           const simError = await connection.simulateTransaction(transaction, [
-            FEEPAYER,
-            AUTHORITY,
+            authorityKeypair,
           ]);
           console.error(
             "(createWhitelist) Simulation logs on error:",
@@ -198,22 +234,30 @@ export async function removeFromWhitelist(
 ): Promise<string> {
   const authorityPublicKey = authorityKeypair.publicKey;
 
-  console.log(`(RemoveFromWhitelist) Authority: ${authorityPublicKey.toBase58()}`);
-  console.log(`(RemoveFromWhitelist) Address to remove: ${addressToRemove.toBase58()}`);
+  console.log(
+    `(RemoveFromWhitelist) Authority: ${authorityPublicKey.toBase58()}`
+  );
+  console.log(
+    `(RemoveFromWhitelist) Address to remove: ${addressToRemove.toBase58()}`
+  );
 
   // 1. Derive Whitelist PDA (controlled by the authority)
   const [whitelistPda] = await PublicKey.findProgramAddress(
     [Buffer.from("whitelist"), authorityPublicKey.toBuffer()],
     WHITELIST_PROGRAM_ID
   );
-  console.log(`(RemoveFromWhitelist) Whitelist PDA: ${whitelistPda.toBase58()}`);
+  console.log(
+    `(RemoveFromWhitelist) Whitelist PDA: ${whitelistPda.toBase58()}`
+  );
 
   // 2. Derive AddressList PDA (associated with the Whitelist PDA)
   const [addressListPda] = await PublicKey.findProgramAddress(
     [Buffer.from("address_list"), whitelistPda.toBuffer()],
     WHITELIST_PROGRAM_ID
   );
-  console.log(`(RemoveFromWhitelist) AddressList PDA: ${addressListPda.toBase58()}`);
+  console.log(
+    `(RemoveFromWhitelist) AddressList PDA: ${addressListPda.toBase58()}`
+  );
 
   // 3. Discriminator for global:remove_from_whitelist
   const discriminator = Buffer.from([7, 144, 216, 239, 243, 236, 193, 235]); // Updated discriminator from IDL
@@ -245,14 +289,19 @@ export async function removeFromWhitelist(
   console.log("(RemoveFromWhitelist) Transaction prepared.");
 
   // send the transaction
-  const txHash = await connection.sendTransaction(transaction, [authorityKeypair]);
+  const txHash = await connection.sendTransaction(transaction, [
+    authorityKeypair,
+  ]);
   console.log("(RemoveFromWhitelist) Transaction sent. Hash:", txHash);
 
   // Wait for confirmation
   console.log("(RemoveFromWhitelist) Waiting for confirmation...");
   const confirmation = await connection.confirmTransaction(txHash, "confirmed");
   if (confirmation.value.err) {
-    console.error("(RemoveFromWhitelist) Transaction failed to confirm:", confirmation.value.err);
+    console.error(
+      "(RemoveFromWhitelist) Transaction failed to confirm:",
+      confirmation.value.err
+    );
     throw new Error("Transaction failed to confirm");
   }
   console.log("(RemoveFromWhitelist) Transaction confirmed successfully");
@@ -266,7 +315,9 @@ export async function verifyWhitelist(
   addressToVerify: PublicKey // The address to verify
 ): Promise<boolean> {
   console.log(`(VerifyWhitelist) Authority: ${authorityPublicKey.toBase58()}`);
-  console.log(`(VerifyWhitelist) Address to verify: ${addressToVerify.toBase58()}`);
+  console.log(
+    `(VerifyWhitelist) Address to verify: ${addressToVerify.toBase58()}`
+  );
 
   // 1. Derive Whitelist PDA (controlled by the authority)
   const [whitelistPda] = await PublicKey.findProgramAddress(
@@ -280,7 +331,9 @@ export async function verifyWhitelist(
     [Buffer.from("address_list"), whitelistPda.toBuffer()],
     WHITELIST_PROGRAM_ID
   );
-  console.log(`(VerifyWhitelist) AddressList PDA: ${addressListPda.toBase58()}`);
+  console.log(
+    `(VerifyWhitelist) AddressList PDA: ${addressListPda.toBase58()}`
+  );
 
   try {
     // 3. Get the AddressList account data
@@ -300,16 +353,22 @@ export async function verifyWhitelist(
     const addresses = [];
 
     for (let i = 0; i < numAddresses; i++) {
-      const start = 12 + (i * 32); // Skip discriminator (8) + count (4) + previous addresses
+      const start = 12 + i * 32; // Skip discriminator (8) + count (4) + previous addresses
       const addressBytes = data.slice(start, start + 32);
       const address = new PublicKey(addressBytes);
       addresses.push(address);
     }
 
     // 5. Check if the address is in the list
-    const isWhitelisted = addresses.some(addr => addr.equals(addressToVerify));
-    console.log(`(VerifyWhitelist) Address ${addressToVerify.toBase58()} is ${isWhitelisted ? 'whitelisted' : 'not whitelisted'}`);
-    
+    const isWhitelisted = addresses.some((addr) =>
+      addr.equals(addressToVerify)
+    );
+    console.log(
+      `(VerifyWhitelist) Address ${addressToVerify.toBase58()} is ${
+        isWhitelisted ? "whitelisted" : "not whitelisted"
+      }`
+    );
+
     return isWhitelisted;
   } catch (error) {
     console.error("(VerifyWhitelist) Error verifying whitelist:", error);

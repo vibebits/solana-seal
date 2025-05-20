@@ -28,7 +28,7 @@ class SolanaSigner {
   }
 }
 
-export const useSessionKey = (programId: string) => {
+export const useSolanaSessionKey = (programId: string) => {
   const { publicKey, signMessage } = useWallet();
   const [sessionKey, setSessionKey] = useState<SessionKey | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -92,4 +92,4 @@ export const useSessionKey = (programId: string) => {
   };
 };
 
-export default useSessionKey; 
+export default useSolanaSessionKey; 

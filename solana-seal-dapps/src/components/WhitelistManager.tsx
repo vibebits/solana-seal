@@ -1,12 +1,7 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Connection } from "@solana/web3.js";
-import { AUTHORITY, SOLANA_RPC_URL } from "@/utils/constants";
-import {
-  addToWhitelist,
-  removeFromWhitelist,
-  verifyWhitelist,
-} from "@/utils/whitelist";
+import { AUTHORITY_PUBLIC_KEY, SOLANA_RPC_URL } from "@/utils/constants";
 
 interface WhitelistManagerProps {
   whitelistStatus: boolean | null;
@@ -28,12 +23,10 @@ export default function WhitelistManager({ whitelistStatus, setWhitelistStatus }
       }
 
       try {
-        const connection = new Connection(SOLANA_RPC_URL, "confirmed");
-        const isWhitelisted = await verifyWhitelist(
-          connection,
-          AUTHORITY.publicKey,
-          publicKey
+        const response = await fetch(
+          `/api/whitelist/verify?authority=${AUTHORITY_PUBLIC_KEY}&address=${publicKey.toBase58()}`
         );
+        const { isWhitelisted } = await response.json();
         setWhitelistStatus(isWhitelisted);
       } catch (err) {
         console.error("Error checking whitelist status:", err);
@@ -42,7 +35,7 @@ export default function WhitelistManager({ whitelistStatus, setWhitelistStatus }
     };
 
     checkWhitelistStatus();
-  }, [publicKey, connected]);
+  }, [publicKey, connected, setWhitelistStatus]);
 
   const handleAddToWhitelist = async () => {
     if (!publicKey || !connected) {
@@ -54,10 +47,17 @@ export default function WhitelistManager({ whitelistStatus, setWhitelistStatus }
     setError(null);
 
     try {
-      const connection = new Connection(SOLANA_RPC_URL, "confirmed");
-      const txHash = await addToWhitelist(connection, AUTHORITY, publicKey);
+      const response = await fetch('/api/whitelist/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address: publicKey.toBase58() }),
+      });
+      const { txHash } = await response.json();
       
       // Wait for transaction confirmation
+      const connection = new Connection(SOLANA_RPC_URL, "confirmed");
       const confirmation = await connection.confirmTransaction(txHash, "confirmed");
       if (confirmation.value.err) {
         throw new Error("Transaction failed to confirm");
@@ -83,10 +83,17 @@ export default function WhitelistManager({ whitelistStatus, setWhitelistStatus }
     setError(null);
 
     try {
-      const connection = new Connection(SOLANA_RPC_URL, "confirmed");
-      const txHash = await removeFromWhitelist(connection, AUTHORITY, publicKey);
+      const response = await fetch('/api/whitelist/remove', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address: publicKey.toBase58() }),
+      });
+      const { txHash } = await response.json();
       
       // Wait for transaction confirmation
+      const connection = new Connection(SOLANA_RPC_URL, "confirmed");
       const confirmation = await connection.confirmTransaction(txHash, "confirmed");
       if (confirmation.value.err) {
         throw new Error("Transaction failed to confirm");
@@ -150,3 +157,4 @@ export default function WhitelistManager({ whitelistStatus, setWhitelistStatus }
     </div>
   );
 }
+ 

@@ -5,28 +5,13 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import { WHITELIST_PROGRAM_ID, DUMMY_FEEPAYER, AUTHORITY_PUBLIC_KEY, SEAL_APPROVE_DISCRIMINATOR } from "@/utils/constants";
+import { STARTER_PROGRAM_ID, DUMMY_FEEPAYER, SEAL_APPROVE_DISCRIMINATOR } from "@/utils/constants";
 
-export async function createWhitelistSealIx(
+export async function createStarterSealIx(
   connection: Connection,
   sessionKeyPubkey: PublicKey,
   encryptionId: string // Hex string for the id: Vec<u8> argument
-): Promise<TransactionInstruction> {
-  const authorityForPDA = AUTHORITY_PUBLIC_KEY;
-  
-  // PDAs derived using authorityForPDA (AUTHORITY_PUBLIC_KEY)
-  const [whitelistPda] = await PublicKey.findProgramAddress(
-    [Buffer.from("whitelist"), authorityForPDA.toBuffer()],
-    WHITELIST_PROGRAM_ID
-  );
-  const [addressListPda] = await PublicKey.findProgramAddress(
-    [Buffer.from("address_list"), whitelistPda.toBuffer()],
-    WHITELIST_PROGRAM_ID
-  );
-
-  console.log(`whitelistPda: ${whitelistPda.toBase58()}`);
-  console.log(`addressListPda: ${addressListPda.toBase58()}`);
-
+): Promise<TransactionInstruction> {  
   // Prepare the id argument from encryptionId (hex string)
   // This will be passed as `id: Vec<u8>` to the Rust function.
   // Anchor expects Vec<u8> to be serialized as: 4-byte LE length + bytes.
@@ -48,12 +33,10 @@ export async function createWhitelistSealIx(
   ]);
 
   const ix = new TransactionInstruction({
-    programId: WHITELIST_PROGRAM_ID,
+    programId: STARTER_PROGRAM_ID,
     keys: [
       // Accounts for SealApprove instruction context
       { pubkey: sessionKeyPubkey, isSigner: false, isWritable: false }, // user account
-      { pubkey: whitelistPda, isSigner: false, isWritable: false }, // whitelist PDA
-      { pubkey: addressListPda, isSigner: false, isWritable: false }, // address list PDA
     ],
     data: instructionData,
   });
@@ -61,7 +44,7 @@ export async function createWhitelistSealIx(
   return ix;
 }
 
-export async function createWhitelistSealTx(
+export async function createStarterSealTx(
   connection: Connection,
   sessionKeyPubkey: PublicKey,
   encryptionId: string // Hex string for the id: Vec<u8> argument
@@ -69,7 +52,7 @@ export async function createWhitelistSealTx(
 
   const feePayer = DUMMY_FEEPAYER;
  
-  const ix = await createWhitelistSealIx(
+  const ix = await createStarterSealIx(
     connection,
     sessionKeyPubkey,
     encryptionId

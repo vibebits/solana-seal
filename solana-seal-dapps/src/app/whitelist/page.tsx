@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 
 import { useWallet } from "@solana/wallet-adapter-react";
 
-import useSessionKey from "@/hooks/useSessionKey";
+import useSolanaSessionKey from "@/hooks/useSolanaSessionKey";
 import { useNetwork, NetworkOption } from "@/contexts/NetworkContext";
 import { SOLANA_RPC_URL, WHITELIST_PROGRAM_ID } from "@/utils/constants";
 import { useSolanaSealClient } from "@/hooks/useSolanaSealClient";
@@ -14,9 +14,9 @@ import WhitelistManager from "@/components/WhitelistManager";
 import { photoBlobs } from "@/utils/photoBlobs";
 import { PublicKey } from "@solana/web3.js";
 import { Connection } from "@solana/web3.js";
-import { createWhitelistTx } from "@/utils/whitelist.seal";
+import { createWhitelistSealTx } from "@/utils/whitelist.seal";
 import { SessionKey as SuiSessionKey } from "@/solana-seal-sdk";
-
+import { getFullEncryptionId } from "@/utils/whitelist";
 // Import the WalletMultiButton component with SSR disabled to prevent hydration errors
 const WalletMultiButton = dynamic(
   async () =>
@@ -33,9 +33,9 @@ export default function Home() {
     isGenerating,
     error: sessionKeyError,
     generateSessionKey,
-  } = useSessionKey(WHITELIST_PROGRAM_ID.toString());
+  } = useSolanaSessionKey(WHITELIST_PROGRAM_ID.toString());
 
-  const solanaSealClient = useSolanaSealClient()
+  const solanaSealClient = useSolanaSealClient();
 
   const handleNetworkChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setNetwork(e.target.value as NetworkOption);
@@ -43,36 +43,11 @@ export default function Home() {
 
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [decryptedImages, setDecryptedImages] = useState<string[]>([]);
+  const [decryptedImages, setDecryptedImages] = useState<(string | null)[]>([]);
 
   useEffect(() => {
     setDecryptedImages(Array(photoBlobs.length).fill(null));
   }, [whitelistStatus]);
-
-  const getFullEncryptionId = (encryptionId: string) => {
-    // this is the simplest one
-    // return Buffer.from(encryptionId).toString('hex');
-
-    // it is obtained from addressListPda
-    const whitelistIdBase58String: string =
-      "5w5SpuJhM7drtZNNBg9o7MoAJg8y85SMLPUTxTqMseMP"; // Example Base58 Pubkey string
-
-    // 1. Convert whitelistIdString (Base58 Pubkey) to Buffer
-    const whitelistIdPubkey = new PublicKey(whitelistIdBase58String);
-    const whitelistIdBytes: Buffer = whitelistIdPubkey.toBuffer(); // This is your 32-byte prefix
-
-    // 2. Convert encryptionId to Buffer (UTF-8 encoded)
-    const encryptionIdBytes: Buffer = Buffer.from(encryptionId, "utf8");
-
-    // 3. Concatenate the two Buffers
-    const combinedIdBytes: Buffer = Buffer.concat([
-      whitelistIdBytes,
-      encryptionIdBytes,
-    ]);
-
-    // for whitelist we need to add whitelist id as prefix
-    return combinedIdBytes.toString("hex");
-  };
 
   const handleDecrypt = async (photoBlobsIndex: number) => {
     if (!sessionKey) {
@@ -98,14 +73,16 @@ export default function Home() {
       const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
       // Create the seal_approve transaction
-      const fullEncryptionId = getFullEncryptionId(photoBlob.encryptionId);
+      const fullEncryptionId = await getFullEncryptionId(
+        photoBlob.encryptionId
+      );
       console.log("Encryption path - ID details:", {
         original: photoBlob.encryptionId,
         hexEncoded: fullEncryptionId,
         has0xPrefix: fullEncryptionId.startsWith("0x"),
       });
 
-      const tx = await createWhitelistTx(
+      const tx = await createWhitelistSealTx(
         connection,
         new PublicKey(sessionKey.getAddress()),
         fullEncryptionId
@@ -125,7 +102,7 @@ export default function Home() {
 
       if (decryptResult) {
         const text = new TextDecoder().decode(decryptResult);
-        setDecryptedImages(prevImages => {
+        setDecryptedImages((prevImages) => {
           const newImages = [...prevImages];
           newImages[photoBlobsIndex] = text;
           return newImages;
@@ -173,6 +150,12 @@ export default function Home() {
               </div>
             </div>
 
+            <div className="text-center text-gray-600">
+              Program ID: <a href={`https://explorer.solana.com/address/${WHITELIST_PROGRAM_ID.toString()}?cluster=devnet`} target="_blank" rel="noopener noreferrer">
+                {WHITELIST_PROGRAM_ID.toString()}
+              </a>
+            </div>
+
             {connected ? (
               <div className="space-y-6">
                 {/* Session Key Section */}
@@ -198,7 +181,9 @@ export default function Home() {
                         </p>
                         <p>
                           <span className="font-medium">Expired?:</span>{" "}
-                          {sessionKey.isExpired() ? "Expired" : "Still valid :)"}
+                          {sessionKey.isExpired()
+                            ? "Expired"
+                            : "Still valid :)"}
                         </p>
 
                         <p className="mt-2 text-gray-600">
@@ -235,9 +220,11 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-
                 {/* Encryption Mode Toggle */}
-                <WhitelistManager whitelistStatus={whitelistStatus} setWhitelistStatus={setWhitelistStatus} />
+                <WhitelistManager
+                  whitelistStatus={whitelistStatus}
+                  setWhitelistStatus={setWhitelistStatus}
+                />
 
                 {/* Decrypt Section */}
                 {whitelistStatus && (
@@ -250,14 +237,18 @@ export default function Home() {
                         <button
                           key={index}
                           onClick={() => handleDecrypt(index)}
-                          disabled={isDecrypting || Boolean(decryptedImages[index])}
+                          disabled={
+                            isDecrypting || decryptedImages[index] !== null
+                          }
                           className={`px-4 py-2 rounded ${
-                            isDecrypting || Boolean(decryptedImages[index])
+                            isDecrypting || decryptedImages[index] !== null
                               ? "bg-gray-400 cursor-not-allowed"
                               : "bg-blue-600 hover:bg-blue-700 text-white"
                           }`}
                         >
-                          {isDecrypting ? "Decrypting..." : `Decrypt Image ${index + 1}`}
+                          {isDecrypting
+                            ? "Decrypting..."
+                            : `Decrypt Image ${index + 1}`}
                         </button>
                       ))}
                     </div>
@@ -267,13 +258,29 @@ export default function Home() {
                       </div>
                     )}
                     <div className="mt-4 grid grid-cols-3 gap-4">
-                      {decryptedImages.map((image, index) => (
-                        image && (
-                          <div key={index} className="p-3 bg-green-50 rounded">
-                            <img src={image} alt={`Decrypted Image ${index + 1}`} className="w-full h-auto" />
-                          </div>
-                        )
-                      ))}
+                      {decryptedImages.map(
+                        (image, index) =>
+                          image && (
+                            <div
+                              key={index}
+                              className="p-3 bg-green-50 rounded"
+                            >
+                              <img
+                                src={image}
+                                alt={`Decrypted Image ${index + 1}`}
+                                className="w-full h-auto"
+                                onError={() => {
+                                  console.error(
+                                    `Failed to load image ${index + 1}`
+                                  );
+                                  setLocalError(
+                                    `Failed to load image ${index + 1}`
+                                  );
+                                }}
+                              />
+                            </div>
+                          )
+                      )}
                     </div>
                   </div>
                 )}
@@ -288,23 +295,17 @@ export default function Home() {
 
         <div className="mt-8 text-center text-sm text-gray-500">
           <p>
-            This demo app interacts with the Solana Seal key server.
+            This demo app interacts with the Solana Seal key server - secrets
+            managed in decentralized and trustless way using Shamir&apos;s Secret
+            Sharing algorithm.
             <br />
-            It creates a transaction with a Seal program instruction and
-            requests keys.
-          </p>
-          <p className="mt-2 font-semibold">
-            Current network:{" "}
-            <span
-              className={
-                network === "mainnet-beta" ? "text-red-500" : "text-green-500"
-              }
-            >
-              {network === "mainnet-beta" ? "MAINNET" : network.toUpperCase()}
-            </span>
+            Client side encrypted assets are stored safely on Walrus.xyz.
+            <br />
+            They can be decrypted only if `seal_approve` check in Solana program
+            passed and threshold is met.
           </p>
         </div>
-    </div>
+      </div>
     </main>
   );
 }

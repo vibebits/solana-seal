@@ -3,7 +3,8 @@ import { SessionKey } from "@/solana-seal-sdk/session-key-solana";
 import { SessionKey as SuiSessionKey } from "@/solana-seal-sdk/session-key";
 import { SealClient } from "@/solana-seal-sdk/client";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { createWhitelistTx } from "@/utils/whitelist.seal";
+import { createStarterSealTx } from "@/utils/starter.seal";
+import { getFullEncryptionId } from "@/utils/starter";
 import { EncryptedObject } from "@/solana-seal-sdk";
 import { SOLANA_RPC_URL } from "@/utils/constants";
 
@@ -16,7 +17,7 @@ export const TextEncryptDecrypt = ({
   sessionKey,
   solanaSealClient,
 }: TextEncryptDecryptProps) => {
-  const [encryptionId, setEncryptionId] = useState("text");
+  const [encryptionId, setEncryptionId] = useState("123-text");
   const [plaintext, setPlaintext] = useState("hello world!");
   const [encryptedData, setEncryptedData] = useState<{
     ciphertext: string;
@@ -26,31 +27,6 @@ export const TextEncryptDecrypt = ({
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-
-  const getFullEncryptionId = () => {
-    // this is the simplest one
-    // return Buffer.from(encryptionId).toString('hex');
-
-    // it is obtained from addressListPda
-    const whitelistIdBase58String: string =
-      "5w5SpuJhM7drtZNNBg9o7MoAJg8y85SMLPUTxTqMseMP"; // Example Base58 Pubkey string
-
-    // 1. Convert whitelistIdString (Base58 Pubkey) to Buffer
-    const whitelistIdPubkey = new PublicKey(whitelistIdBase58String);
-    const whitelistIdBytes: Buffer = whitelistIdPubkey.toBuffer(); // This is your 32-byte prefix
-
-    // 2. Convert encryptionId to Buffer (UTF-8 encoded)
-    const encryptionIdBytes: Buffer = Buffer.from(encryptionId, "utf8");
-
-    // 3. Concatenate the two Buffers
-    const combinedIdBytes: Buffer = Buffer.concat([
-      whitelistIdBytes,
-      encryptionIdBytes,
-    ]);
-
-    // for whitelist we need to add whitelist id as prefix
-    return combinedIdBytes.toString("hex");
-  };
 
   const handleEncrypt = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +42,7 @@ export const TextEncryptDecrypt = ({
       const plaintextBytes = new TextEncoder().encode(plaintext);
 
       // Ensure the encryptionId is a valid hex string
-      const fullEncryptionId = getFullEncryptionId();
+      const fullEncryptionId = await getFullEncryptionId(encryptionId);
       console.log("Encryption path - ID details:", {
         original: encryptionId,
         hexEncoded: fullEncryptionId,
@@ -113,14 +89,14 @@ export const TextEncryptDecrypt = ({
       const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
       // Create the seal_approve transaction
-      const fullEncryptionId = getFullEncryptionId();
+      const fullEncryptionId = await getFullEncryptionId(encryptionId);
       console.log("Encryption path - ID details:", {
         original: encryptionId,
         hexEncoded: fullEncryptionId,
         has0xPrefix: fullEncryptionId.startsWith("0x"),
         length: fullEncryptionId.length,
       });
-      const tx = await createWhitelistTx(
+      const tx = await createStarterSealTx(
         connection,
         new PublicKey(sessionKey.getAddress()),
         fullEncryptionId
@@ -221,7 +197,7 @@ export const TextEncryptDecrypt = ({
         });
         setLocalError(err.message);
       } else {
-        setLocalError("Failed to decrypt data");
+        setLocalError("Failed to decrypt data. To decrypt successfully, the encryption ID should start with '123'.");
       }
     } finally {
       setIsDecrypting(false);
@@ -250,7 +226,7 @@ export const TextEncryptDecrypt = ({
             required
           />
           <p className="text-xs text-gray-500 mt-1">
-            This should be a valid hexadecimal string (0-9, a-f)
+          This is a string. If it starts with <em>123</em>, you can get decryption key from the server.
           </p>
         </div>
 

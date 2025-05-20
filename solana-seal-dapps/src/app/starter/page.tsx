@@ -5,9 +5,9 @@ import { useState } from "react";
 
 import { useWallet } from "@solana/wallet-adapter-react";
 
-import useSessionKey from "@/hooks/useSessionKey";
+import useSolanaSessionKey from "@/hooks/useSolanaSessionKey";
 import { useNetwork, NetworkOption } from "@/contexts/NetworkContext";
-import { WHITELIST_PROGRAM_ID } from "@/utils/constants";
+import { STARTER_PROGRAM_ID } from "@/utils/constants";
 import { TextEncryptDecrypt } from "@/components/TextEncryptDecrypt";
 import { ImageEncryptDecrypt } from "@/components/ImageEncryptDecrypt";
 import { useSolanaSealClient } from "@/hooks/useSolanaSealClient";
@@ -22,15 +22,17 @@ const WalletMultiButton = dynamic(
 export default function Home() {
   const { connected } = useWallet();
   const { network, setNetwork } = useNetwork();
-  const [encryptionMode, setEncryptionMode] = useState<'text' | 'image'>('text');
+  const [encryptionMode, setEncryptionMode] = useState<"text" | "image">(
+    "text"
+  );
   const {
     sessionKey,
     isGenerating,
     error: sessionKeyError,
     generateSessionKey,
-  } = useSessionKey(WHITELIST_PROGRAM_ID.toString());
+  } = useSolanaSessionKey(STARTER_PROGRAM_ID.toString());
 
-  const solanaSealClient = useSolanaSealClient()
+  const solanaSealClient = useSolanaSealClient();
 
   const handleNetworkChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setNetwork(e.target.value as NetworkOption);
@@ -68,6 +70,12 @@ export default function Home() {
               </div>
             </div>
 
+            <div className="text-center text-gray-600">
+              Program ID: <a href={`https://explorer.solana.com/address/${STARTER_PROGRAM_ID.toString()}?cluster=devnet`} target="_blank" rel="noopener noreferrer">
+                {STARTER_PROGRAM_ID.toString()}
+              </a>
+            </div>
+
             {connected ? (
               <div className="space-y-6">
                 {/* Session Key Section */}
@@ -93,7 +101,9 @@ export default function Home() {
                         </p>
                         <p>
                           <span className="font-medium">Expired?:</span>{" "}
-                          {sessionKey.isExpired() ? "Expired" : "Still valid :)"}
+                          {sessionKey.isExpired()
+                            ? "Expired"
+                            : "Still valid :)"}
                         </p>
 
                         <p className="mt-2 text-gray-600">
@@ -133,24 +143,26 @@ export default function Home() {
 
                 {/* Encryption Mode Toggle */}
                 <div className="border p-4 rounded-md">
-                  <h2 className="text-lg font-medium text-gray-900 mb-4">Encryption Mode</h2>
+                  <h2 className="text-lg font-medium text-gray-900 mb-4">
+                    Encryption Mode
+                  </h2>
                   <div className="flex gap-4">
                     <button
-                      onClick={() => setEncryptionMode('text')}
+                      onClick={() => setEncryptionMode("text")}
                       className={`flex-1 py-2 px-4 rounded-md ${
-                        encryptionMode === 'text'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        encryptionMode === "text"
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       }`}
                     >
                       Text Encryption
                     </button>
                     <button
-                      onClick={() => setEncryptionMode('image')}
+                      onClick={() => setEncryptionMode("image")}
                       className={`flex-1 py-2 px-4 rounded-md ${
-                        encryptionMode === 'image'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        encryptionMode === "image"
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       }`}
                     >
                       Image Encryption
@@ -159,10 +171,16 @@ export default function Home() {
                 </div>
 
                 {/* Encryption Component */}
-                {encryptionMode === 'text' ? (
-                  <TextEncryptDecrypt sessionKey={sessionKey} solanaSealClient={solanaSealClient} />
+                {encryptionMode === "text" ? (
+                  <TextEncryptDecrypt
+                    sessionKey={sessionKey}
+                    solanaSealClient={solanaSealClient}
+                  />
                 ) : (
-                  <ImageEncryptDecrypt sessionKey={sessionKey} solanaSealClient={solanaSealClient} />
+                  <ImageEncryptDecrypt
+                    sessionKey={sessionKey}
+                    solanaSealClient={solanaSealClient}
+                  />
                 )}
               </div>
             ) : (
@@ -175,23 +193,17 @@ export default function Home() {
 
         <div className="mt-8 text-center text-sm text-gray-500">
           <p>
-            This demo app interacts with the Solana Seal key server.
+            This demo app interacts with the Solana Seal key server - secrets
+            managed in decentralized and trustless way using Shamir&apos;s
+            Secret Sharing algorithm.
             <br />
-            It creates a transaction with a Seal program instruction and
-            requests keys.
-          </p>
-          <p className="mt-2 font-semibold">
-            Current network:{" "}
-            <span
-              className={
-                network === "mainnet-beta" ? "text-red-500" : "text-green-500"
-              }
-            >
-              {network === "mainnet-beta" ? "MAINNET" : network.toUpperCase()}
-            </span>
+            Client side encrypted assets are stored safely on Walrus.xyz.
+            <br />
+            They can be decrypted only if `seal_approve` check in Solana program
+            passed and threshold is met.
           </p>
         </div>
-    </div>
+      </div>
     </main>
   );
 }
