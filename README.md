@@ -39,14 +39,45 @@ The `/solana-seals-dapps` directory contains example applications demonstrating 
 ### Key Servers
 - Server #1
   - URL: https://solana-seal-key-server-1.up.railway.app
-  - Sui Object: [https://suiscan.xyz/testnet/object/0xc99e3323d679ab4d26de2c984cda693698c453c9ae12baaf218c7ea3518428b0/tx-blocks]
+  - Sui Object: https://suiscan.xyz/testnet/object/0xc99e3323d679ab4d26de2c984cda693698c453c9ae12baaf218c7ea3518428b0/tx-blocks
 - Server #2
   - URL: https://solana-seal-key-server-2.up.railway.app
-  - Sui Object: [https://suiscan.xyz/testnet/object/0xa6a2f5713b84cfc0572b29d9b3edf4fa9d88915e821f6ac10c77fcf84d57181f/tx-blocks]
+  - Sui Object: https://suiscan.xyz/testnet/object/0xa6a2f5713b84cfc0572b29d9b3edf4fa9d88915e821f6ac10c77fcf84d57181f/tx-blocks
 
 ### Deployed Programs
 - Starter Program: A basic implementation for getting started
+ - https://explorer.solana.com/address/HMyQGJVyXw5MvpHbKQ8noKXcbtX9TyPkwM8TcyHSFdTJ?cluster=devnet
 - Whitelist Program: Advanced implementation with access control features
+ - https://explorer.solana.com/address/5E7FfNPZjzbxLJCTz64oTsk1ZpKZKDsqAiG5H3igxe9x?cluster=devnet
+
+ ## seal_approve for Solana programs
+
+ `seal_approve` is used as access policy control programmable in Solana program. It is checked by the key servers to determine access.
+
+ It can be tweaked to define any logic.
+
+ ```rust
+// seal_approve can takes other params after `ctx` and `id`
+pub fn seal_approve(ctx: Context<SealApprove>, id: Vec<u8>) -> Result<String> {
+
+    // any logic
+
+    // it must return ok or not_ok
+    if success {
+        Ok("ok".to_string())
+    } else {
+        Ok("not_ok".to_string())
+    }
+}
+
+// SealApprove context's first account must be user's account
+// user's account is checked against user from sessionKey/certificate by the key servers
+#[derive(Accounts)]
+pub struct SealApprove<'info> {
+  pub user: AccountInfo<'info>,
+  // other accounts or PDAs
+}
+ ```
 
 ## Getting Started
 
@@ -59,41 +90,47 @@ The `/solana-seals-dapps` directory contains example applications demonstrating 
 ### Installation
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/solana-seal.git
+git clone https://github.com/vibebits/solana-seal.git
 cd solana-seal
 ```
 
 2. Install dependencies:
 ```bash
-npm install
+pnpm install
 ```
 
-3. Build the project:
+3. Set .env variables and set them:
 ```bash
-npm run build
+cp example.env .env
 ```
 
-### Usage
-1. Import the SDK in your project:
-```typescript
-import { SolanaSeal } from '@solana-seal/sdk';
+4. Run the dev locally:
+```bash
+pnpm run dev
 ```
 
-2. Initialize the client:
+5. Check out the demos:
+- http://localhost:3000/starter
+- http://localhost:3000/whitelist
+
+### Usage of hooks
+1. useSolanaSealClient hook:
 ```typescript
-const seal = new SolanaSeal({
-  keyServerUrl: 'https://solana-seal-key-server-1.up.railway.app',
-  // Additional configuration options
-});
+import { useSolanaSealClient } from "@/hooks/useSolanaSealClient";
+
+const solanaSealClient = useSolanaSealClient();
 ```
 
-3. Use the SDK to interact with decentralized storage:
+2. useSolanaSessionKey hook:
 ```typescript
-// Example: Store data
-await seal.storeData(data);
+import useSolanaSessionKey from "@/hooks/useSolanaSessionKey";
 
-// Example: Retrieve data
-const data = await seal.retrieveData(id);
+const {
+  sessionKey,
+  isGenerating,
+  error: sessionKeyError,
+  generateSessionKey,
+} = useSolanaSessionKey('YOUR-SOLANA-PROGRAM-ID');
 ```
 
 ## Contributing
